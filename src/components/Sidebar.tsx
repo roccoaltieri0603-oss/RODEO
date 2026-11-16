@@ -7,6 +7,7 @@ import { useNotificaciones } from "../hooks/useNotificaciones";
 import { useSidebarOculta } from "../hooks/useOcultarDock";
 import type { EstadoOrdenPastoreo } from "../hooks/useOrdenPastoreo";
 import AsignarPasturaModal from "./AsignarPasturaModal";
+import PasturasOnboarding from "./PasturasOnboarding";
 import NotificationsPanel from "./NotificationsPanel";
 import OrdenPastoreoPanel from "./OrdenPastoreoPanel";
 import BotonAccion from "./ui/BotonAccion";
@@ -61,6 +62,12 @@ interface SidebarProps {
   operacionBatch: "satelite" | "clima" | null;
   batchBloqueado: boolean;
   onboardingStep?: 1 | 2;
+  /** "Listo" del paso de lotes: pasa al paso de las pasturas. */
+  onListoLotes?: () => void;
+  /** Paso final: las pasturas se están eligiendo. */
+  fasePasturas?: boolean;
+  /** "Terminar" del paso de pasturas: sale del onboarding hacia la pantalla normal. */
+  onTerminarOnboarding?: () => void;
   guardando?: boolean;
   onToggleShowInactivos: () => void;
   onSelectLote: (id: string) => void;
@@ -124,6 +131,9 @@ export default function Sidebar({
   operacionBatch,
   batchBloqueado,
   onboardingStep,
+  onListoLotes,
+  fasePasturas = false,
+  onTerminarOnboarding,
   guardando = false,
   onToggleShowInactivos,
   onSelectLote,
@@ -439,7 +449,7 @@ export default function Sidebar({
       ref={asideRef}
       className={`${claseAside} transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${ocultaEfectiva ? "-translate-x-[calc(100%+0.75rem)]" : ""}`}
     >
-      {!(establecimiento && !enOnboarding) && (<nav className="flex flex-wrap gap-3 text-sm"><Link to="/" className="foco-campo inline-flex items-center gap-1.5 self-center rounded text-[15px] font-medium text-red-500 no-underline hover:text-red-400"><span aria-hidden="true">←</span><span className="underline underline-offset-4">Atrás</span></Link>{establecimientoId && <Link to={`/establecimientos/${establecimientoId}/equipo`} className="rounded bg-white/90 px-3 py-2 text-brand">Equipo</Link>}{establecimientoId && (membresia?.rol === 'PROPIETARIO' || membresia?.permisos.includes('ver_dispositivos_gps')) && <Link to={`/establecimientos/${establecimientoId}/dispositivos`} className="rounded bg-white/90 px-3 py-2 text-brand">Dispositivos</Link>}</nav>)}
+      {!(establecimiento && !enOnboarding) && (<nav className="flex flex-wrap gap-3 text-sm"><Link to="/" className="foco-campo inline-flex items-center gap-1.5 self-center rounded text-[15px] font-medium text-red-500 no-underline hover:text-red-400"><span aria-hidden="true">←</span><span className="underline underline-offset-4">Atrás</span></Link>{!enOnboarding && establecimientoId && <Link to={`/establecimientos/${establecimientoId}/equipo`} className="rounded bg-white/90 px-3 py-2 text-brand">Equipo</Link>}{!enOnboarding && establecimientoId && (membresia?.rol === 'PROPIETARIO' || membresia?.permisos.includes('ver_dispositivos_gps')) && <Link to={`/establecimientos/${establecimientoId}/dispositivos`} className="rounded bg-white/90 px-3 py-2 text-brand">Dispositivos</Link>}</nav>)}
       {!establecimiento && !enOnboarding && <h1 className="m-0 text-2xl tracking-[0.05em] text-brand">RODEO</h1>}
 
       {onboardingStep && (
@@ -449,7 +459,7 @@ export default function Sidebar({
           </p>
           <div className="flex flex-col gap-[clamp(0.75rem,1.87vw,1.5rem)]">
             <p className="texto-foto text-[clamp(1.05rem,2.34vw,1.875rem)] font-medium tracking-[-0.05em] text-white underline">
-              Paso {onboardingStep} de 2
+              Paso {fasePasturas ? 3 : onboardingStep} de 3
             </p>
             <div className="flex flex-col gap-[clamp(0.25rem,0.55vw,0.44rem)]">
               <PasoOnboarding
@@ -457,22 +467,30 @@ export default function Sidebar({
                 activo={onboardingStep === 1}
                 completado={onboardingStep === 2}
               />
-              <PasoOnboarding etiqueta="Marcar los lotes" activo={onboardingStep === 2} />
+              <PasoOnboarding etiqueta="Marcar los lotes" activo={onboardingStep === 2 && !fasePasturas} completado={fasePasturas} />
+              <PasoOnboarding etiqueta="Elegir las pasturas" activo={fasePasturas} />
             </div>
           </div>
         </TarjetaVidrio>
       )}
 
-      {onboardingStep === 2 && (
+      {onboardingStep === 2 && fasePasturas && (
+        <TarjetaVidrio className="gap-[clamp(0.75rem,1.87vw,1.5rem)]">
+          <PasturasOnboarding lotes={lotes} onLoteActualizado={onLoteActualizado} onTerminar={() => onTerminarOnboarding?.()} />
+        </TarjetaVidrio>
+      )}
+
+      {onboardingStep === 2 && !fasePasturas && (
         <TarjetaVidrio className="gap-[clamp(0.75rem,1.87vw,1.5rem)]">
           {panelSugerencias ?? (
             <>
               <p className="texto-foto p-[clamp(0.4rem,0.78vw,0.625rem)] text-[clamp(0.9rem,2.03vw,1.62rem)] font-medium tracking-[-0.05em] text-white">
-                Ahora marcá tu primer lote adentro del campo, de la misma forma:
-                una vez en cada esquina y de nuevo en la primera para cerrarlo.
+                {lotes.length > 0
+                  ? `Ya marcaste ${lotes.length} ${lotes.length === 1 ? "lote" : "lotes"}. Podés marcar otro o, si ya están todos, apretar Listo.`
+                  : "Ahora marcá tu primer lote adentro del campo, de la misma forma: una vez en cada esquina y de nuevo en la primera para cerrarlo."}
               </p>
               <BotonAccion onClick={onStartDrawLote} hidden={!puede("crear_lotes")} disabled={guardando || drawMode !== "idle"}>
-                {drawMode === "lote" ? "Marcando el lote..." : "Marcar tu primer lote"}
+                {drawMode === "lote" ? "Marcando el lote..." : lotes.length > 0 ? "Marcar otro lote" : "Marcar tu primer lote"}
               </BotonAccion>
               {iaDisponible && puede("usar_ia") && (
                 <BotonSubdividirIA
@@ -495,6 +513,11 @@ export default function Sidebar({
                 <p role="alert" className="texto-foto m-0 rounded-xl border border-white/40 bg-red-900/40 p-2 text-[0.78rem] text-white">
                   {iaError}
                 </p>
+              )}
+              {lotes.length > 0 && (
+                <BotonAccion onClick={onListoLotes} disabled={iaBloqueada}>
+                  Listo
+                </BotonAccion>
               )}
             </>
           )}

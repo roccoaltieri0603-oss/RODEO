@@ -194,8 +194,8 @@ y `categoria` conservan lo ya guardado, las observaciones nuevas las guardan
 NULL y ninguna API las devuelve. Desde el 06/11/2026 el satélite no pinta el
 mapa: cada lote se colorea por qué tan apto está para entrar hoy (Perfecto /
 Regular / Cuidado / No apto, la misma condición de la ficha, más piso pesado,
-con animales y sin datos), con `condicionHoy` del orden de pastoreo y una
-leyenda con el texto de cada color a la vista. El NDVI sigue en la lista de
+con animales y sin datos), con `condicionHoy` del orden de pastoreo. La leyenda de colores del mapa se
+sacó (decisión del equipo): la condición se lee en el cartel de cada lote. El NDVI sigue en la lista de
 lotes y en la ficha.
 
 Índice de inundación **experimental** (migración 022, validada en un PostgreSQL

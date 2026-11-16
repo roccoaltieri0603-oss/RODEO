@@ -4,6 +4,7 @@ import { actualizarLote } from "../api/rodeo";
 import { useEstablecimiento } from "../hooks/useEstablecimiento";
 import { NOMBRES_PASTURA, type Lote, type TipoPastura } from "../types";
 import { APAGADO, PASTILLA_VERDE, TARJETA, VOLANTA } from "./ui/PantallaDatos";
+import CampoFecha from "./ui/CampoFecha";
 
 interface PasturaPanelProps {
   lote: Lote;
@@ -68,7 +69,7 @@ export default function PasturaPanel({ lote, onGuardado }: PasturaPanelProps) {
         </label>
         <label className="flex flex-col">
           <span className={ETIQUETA}>Fecha de siembra</span>
-          <input className={CAMPO} type="date" max={hoy()} value={siembra} disabled={guardando} onChange={(event) => setSiembra(event.target.value)} />
+          <CampoFecha className={CAMPO} max={hoy()} value={siembra} disabled={guardando} onChange={setSiembra} />
         </label>
         <button type="button" className={PASTILLA_VERDE} onClick={guardar} disabled={guardando || sinCambios}>{guardando ? "Guardando..." : "Guardar pastura"}</button>
       </div>}

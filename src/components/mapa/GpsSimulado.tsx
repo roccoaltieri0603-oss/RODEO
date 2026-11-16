@@ -31,8 +31,9 @@ export default function GpsSimulado({ lotesActivos, onLoteConfirmado }: Props) {
       if (lote) timeoutId = window.setTimeout(() => loteCallbackRef.current(lote), TIEMPO_DENTRO_MS);
     };
     if (!puedeVer) return () => { map.dragging.enable(); };
-    obtenerDispositivos(establecimientoId).then((devices) => {
+    obtenerDispositivos(establecimientoId).then((todos) => {
     if (!vigente) return;
+    const devices = todos;
     setItems(devices);
     markers = devices.map((d) => {
       if (d.latitud === undefined || d.longitud === undefined || d.numero === undefined) throw new Error("GPS simulado incompleto");

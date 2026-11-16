@@ -27,6 +27,50 @@
   top: 3.75rem;
 }
 
+/* Cartelito de cada lote al pasar el cursor (MapEngine.tsx): verde oscuro de la
+   marca, esquinas suaves y un punto del color de la condición del lote. */
+.leaflet-tooltip.lote-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 13px 8px;
+  border: 1px solid rgba(151, 234, 124, 0.45);
+  border-radius: 14px;
+  background: rgba(14, 21, 17, 0.88);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-family: "Host Grotesk", system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.leaflet-tooltip-top.lote-tip::before {
+  border-top-color: rgba(14, 21, 17, 0.88);
+}
+
+.lote-tip-nombre {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lote-tip-condicion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.lote-tip-condicion i {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
 .leaflet-draw-tooltip {
   border-radius: 6px;
   padding: 5px 10px;

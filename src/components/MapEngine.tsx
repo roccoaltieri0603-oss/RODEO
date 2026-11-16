@@ -102,6 +102,10 @@ function loteStyle(
   };
 }
 
+function escaparHtml(texto: string): string {
+  return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+}
+
 function createEditHandler(map: L.Map, layer: L.Polygon): L.EditToolbar.Edit {
   const featureGroup = new L.FeatureGroup([layer]);
   return new L.EditToolbar.Edit(map as unknown as L.DrawMap, { featureGroup });
@@ -123,6 +127,7 @@ const MapEngine = forwardRef<MapEngineHandle, MapEngineProps>(function MapEngine
   const pendingTargetRef = useRef<DrawTarget>(null);
   const historialLoteRef = useRef<PolygonFeature[]>([]);
   const limpiarHistorialLoteRef = useRef<(() => void) | null>(null);
+  const centradoIdRef = useRef<string | null>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
 
@@ -169,6 +174,13 @@ const MapEngine = forwardRef<MapEngineHandle, MapEngineProps>(function MapEngine
         style: ESTABLECIMIENTO_STYLE,
       }).addTo(map);
       establecimientoLayerRef.current = geoLayer.getLayers()[0] as L.Polygon;
+      // El mapa nace centrado en el establecimiento: al crearlo y al volver de
+      // otra sección o de la ficha de un lote (la pantalla se monta de nuevo).
+      // Una vez por establecimiento: editar su límite no mueve la vista.
+      if (centradoIdRef.current !== props.establecimiento.id) {
+        centradoIdRef.current = props.establecimiento.id;
+        map.fitBounds(geoLayer.getBounds(), { maxZoom: 17, padding: [40, 40], animate: false });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, props.establecimiento]);
@@ -187,7 +199,10 @@ const MapEngine = forwardRef<MapEngineHandle, MapEngineProps>(function MapEngine
         style: loteStyle(lote, selected, condicion),
       });
       const base = lote.apodo ? `Lote ${lote.numero} — ${lote.apodo}` : `Lote ${lote.numero}`;
-      layer.bindTooltip(condicion ? `${base}<br>${condicion.etiqueta}` : base);
+      // El apodo lo escribe el usuario y bindTooltip interpreta HTML: se escapa.
+      const html = `<span class="lote-tip-nombre">${escaparHtml(base)}</span>`
+        + (condicion ? `<span class="lote-tip-condicion"><i style="background:${condicion.color}"></i>${escaparHtml(condicion.etiqueta)}</span>` : "");
+      layer.bindTooltip(html, { className: "lote-tip", direction: "top", sticky: true, offset: [0, -6] });
       layer.on("click", () => propsRef.current.onSelectLote(lote.id));
       layer.addTo(group);
       const polygonLayer = layer.getLayers()[0];
@@ -251,11 +266,7 @@ const MapEngine = forwardRef<MapEngineHandle, MapEngineProps>(function MapEngine
       startDrawLote() {
         drawHandlerRef.current?.disable();
         pendingTargetRef.current = "lote";
-        const establecimiento = propsRef.current.establecimiento;
-        if (establecimiento) {
-          const bounds = L.geoJSON(establecimiento.polygon).getBounds();
-          map.flyToBounds(bounds, { maxZoom: 17, duration: 0.6, padding: [40, 40] });
-        }
+        // No se mueve la vista: se dibuja donde la persona ya está mirando.
         const handler = new L.Draw.Polygon(map as unknown as L.DrawMap, {
           shapeOptions: {
             color: LOTE_COLOR,

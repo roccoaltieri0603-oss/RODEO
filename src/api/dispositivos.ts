@@ -21,6 +21,7 @@ export interface Dispositivo {
   identificadorEquipo: string;
   /** Nombre que le pone el productor. null si nadie lo bautizó. */
   apodo: string | null;
+  /** Sólo los GPS activados en "Mis dispositivos" se dibujan en el mapa. */
   actualizadaEn?: string;
   conexion: EstadoConexion;
   bateriaPorcentaje: number | null;

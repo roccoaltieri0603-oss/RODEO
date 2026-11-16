@@ -6,6 +6,7 @@ import { registrarUsoLote } from "../api/historial";
 import { actualizarLote } from "../api/rodeo";
 import { useEstablecimiento } from "../hooks/useEstablecimiento";
 import { NOMBRES_PASTURA, type Lote, type TipoPastura } from "../types";
+import CampoFecha from "./ui/CampoFecha";
 
 export interface AccionesCompletarLote {
   onLoteActualizado: (lote: Lote) => void;
@@ -123,7 +124,7 @@ export default function CompletarDatosLote({ loteId, falta, onLoteActualizado, o
             <>
               <label className="flex flex-col gap-1">
                 <span className={PREGUNTA}>¿Qué día salieron los animales por última vez?</span>
-                <input className={CAMPO} type="date" max={hoy()} value={fecha} disabled={guardando} autoFocus onChange={(evento) => setFecha(evento.target.value)} />
+                <CampoFecha className={CAMPO} max={hoy()} value={fecha} disabled={guardando} autoFocus onChange={setFecha} />
               </label>
               <p className="m-0 text-[0.7rem] leading-snug text-gray-500">
                 Si no la sabés, no hace falta inventarla: se sigue contando desde el alta del lote.{" "}

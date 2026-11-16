@@ -12,7 +12,7 @@ interface ModalProps {
 export default function Modal({ onDismiss, children }: ModalProps) {
   return (
     <div
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-[var(--color-campo-900)]/45 backdrop-blur-[2px]"
       onMouseDown={onDismiss}
     >
       {children}

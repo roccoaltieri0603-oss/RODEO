@@ -27,6 +27,7 @@ import {
 } from "../api/registroUsos";
 import Button from "../components/ui/Button";
 import PantallaDatos, { EstadoDePantalla, TARJETA, PASTILLA_VERDE, APAGADO as TEXTO_APAGADO } from "../components/ui/PantallaDatos";
+import CampoFecha from "../components/ui/CampoFecha";
 
 const ETIQUETA_FILTRO = "block text-[0.72rem] font-bold uppercase tracking-[0.06em] text-gray-500";
 const CAMPO_FILTRO = "mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800";
@@ -305,13 +306,13 @@ export default function PantallaRegistroUsos() {
           </label>
           <label className="flex flex-col">
             <span className={ETIQUETA_FILTRO}>Desde</span>
-            <input type="date" className={CAMPO_FILTRO} value={desde} max={hasta || undefined}
-              onChange={(evento) => cambiarFiltro("desde", evento.target.value)} />
+            <CampoFecha className={CAMPO_FILTRO} value={desde} max={hasta || undefined}
+              onChange={(valor) => cambiarFiltro("desde", valor)} />
           </label>
           <label className="flex flex-col">
             <span className={ETIQUETA_FILTRO}>Hasta</span>
-            <input type="date" className={CAMPO_FILTRO} value={hasta} min={desde || undefined}
-              onChange={(evento) => cambiarFiltro("hasta", evento.target.value)} />
+            <CampoFecha className={CAMPO_FILTRO} value={hasta} min={desde || undefined}
+              onChange={(valor) => cambiarFiltro("hasta", valor)} />
           </label>
           <label className="flex items-center gap-2 pb-1.5 text-sm">
             <input type="checkbox" checked={incluirInactivos}

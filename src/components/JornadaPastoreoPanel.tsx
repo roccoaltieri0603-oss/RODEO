@@ -9,6 +9,7 @@ import ConfirmModal from "./ConfirmModal";
 import Button from "./ui/Button";
 import Modal, { MODAL_CARD_CLASS } from "./ui/Modal";
 import { APAGADO, PASTILLA_CLARA, PASTILLA_VERDE, TARJETA } from "./ui/PantallaDatos";
+import CampoFecha from "./ui/CampoFecha";
 
 /**
  * Jornada de pastoreo, cargada a mano: cuándo entraron y salieron los
@@ -153,7 +154,7 @@ function CampoMomento({ etiqueta, valor, onCambio, deshabilitado }: { etiqueta: 
     <div className="grid grid-cols-2 gap-2">
       <label className="flex flex-col text-[0.78rem] text-gray-600">
         Día
-        <input className={CAMPO} type="date" value={valor.fecha} disabled={deshabilitado} onChange={(evento) => onCambio({ ...valor, fecha: evento.target.value })} />
+        <CampoFecha className={CAMPO} value={valor.fecha} disabled={deshabilitado} onChange={(fecha) => onCambio({ ...valor, fecha })} />
       </label>
       <label className="flex flex-col text-[0.78rem] text-gray-600">
         Hora
@@ -457,7 +458,7 @@ export default function JornadaPastoreoPanel({ loteId, ultimoUso, diasDescanso, 
       <div className="border-t border-gray-100 pt-3">
         <p className="m-0 text-[0.82rem] text-gray-600">¿No sabés las horas ni los animales? Registrá sólo el día en que salieron:</p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
-          <input className={`${CAMPO} mt-0 w-auto`} type="date" value={fechaSola} disabled={guardando} onChange={(evento) => setFechaSola(evento.target.value)} aria-label="Día en que salieron los animales" />
+          <CampoFecha className={`${CAMPO} mt-0 w-auto`} value={fechaSola} disabled={guardando} onChange={setFechaSola} aria-label="Día en que salieron los animales" />
           <button type="button" className={PASTILLA_CLARA} disabled={!fechaSola || guardando}
             onClick={() => {
               if (fechaSola > hoy()) { setError("El día del pastoreo no puede ser futuro."); return; }

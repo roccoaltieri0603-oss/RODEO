@@ -9,6 +9,7 @@ import Button from "./ui/Button";
 import AvisoInfo from "./ui/AvisoInfo";
 import Modal from "./ui/Modal";
 import { APAGADO, PASTILLA_CLARA, TARJETA, VOLANTA } from "./ui/PantallaDatos";
+import CampoFecha from "./ui/CampoFecha";
 
 /**
  * Mediciones de altura del pasto, cargadas en el campo. Son observaciones
@@ -67,7 +68,7 @@ function CargarMedicionModal({ loteId, onGuardado, onCancelar }: { loteId: strin
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex flex-col">
           <span className={ETIQUETA}>Fecha</span>
-          <input className={CAMPO} type="date" value={fecha} disabled={guardando} onChange={(evento) => setFecha(evento.target.value)} />
+          <CampoFecha className={CAMPO} value={fecha} disabled={guardando} onChange={setFecha} />
         </label>
         <label className="flex flex-col">
           <span className={ETIQUETA}>Cuándo</span>

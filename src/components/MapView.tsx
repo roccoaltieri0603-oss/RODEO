@@ -43,7 +43,7 @@ const MapView = forwardRef<MapEngineHandle, MapViewProps>(function MapView(props
       center={ARGENTINA_CENTER}
       zoom={5}
       minZoom={5}
-      maxZoom={19}
+      maxZoom={21}
       zoomControl={false}
       attributionControl={false}
       maxBounds={ARGENTINA_BOUNDS}
@@ -57,11 +57,11 @@ const MapView = forwardRef<MapEngineHandle, MapViewProps>(function MapView(props
       <TileLayer
         attribution="Imágenes &copy; Esri, Maxar, Earthstar Geographics"
         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        maxNativeZoom={19}
+        maxNativeZoom={17}
       />
       <TileLayer
         url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
-        maxNativeZoom={19}
+        maxNativeZoom={13}
       />
       <MapEngine
         ref={ref}

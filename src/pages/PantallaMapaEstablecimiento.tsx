@@ -7,7 +7,6 @@ import MapView from "../components/MapView";
 import type { CondicionVisual, MapEngineHandle } from "../components/MapEngine";
 import Sidebar, { type DrawMode } from "../components/Sidebar";
 import CondicionPanel from "../components/CondicionPanel";
-import MapaLeyendaCondicion from "../components/MapaLeyendaCondicion";
 import PromptModal from "../components/PromptModal";
 import ConfirmModal from "../components/ConfirmModal";
 import SugerenciasPanel from "../components/SugerenciasPanel";
@@ -213,10 +212,16 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
     setSearchParams(searchParams, { replace: true });
   }, [establecimiento, datosCargando, puede, searchParams, setSearchParams]);
 
-  const onboardingStep = !establecimientoId ? 1 : membresia?.principal && !establecimiento?.onboardingCompleted ? 2 : undefined;
   // useMemo: con un array nuevo en cada render, condicionPorLote cambiaba siempre y el mapa
   // rehacía todas las capas, soltando la que se estaba editando (sin vértices ni arrastre).
   const lotesActivos = useMemo(() => lotes.filter((lote) => lote.activo), [lotes]);
+  // El backend da el onboarding por completo al crear el primer lote, pero la
+  // persona sigue en el paso 2 (marcando más lotes) hasta apretar "Listo".
+  const [terminandoLotes, setTerminandoLotes] = useState(false);
+  // Después de "Listo" viene la elección de pasturas, todavía dentro del onboarding.
+  const [fasePasturas, setFasePasturas] = useState(false);
+  const pasoBackend = !establecimientoId ? 1 : membresia?.principal && !establecimiento?.onboardingCompleted ? 2 : undefined;
+  const onboardingStep = pasoBackend ?? (terminandoLotes ? 2 : undefined);
   // Se vuelve a pedir si cambian los lotes o su pastura, el satélite o el clima;
   // mientras el clima se actualiza, no: el orden saldría con el clima viejo.
   const claveLotes = lotesActivos.map((lote) => `${lote.id}:${lote.tipoPastura ?? ""}`).join(",");
@@ -263,6 +268,8 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
     crearLote(establecimientoId, polygon).then((lote) => {
       setLotes((actuales) => [...actuales, lote]);
       setSelectedLoteId(lote.id);
+      // Sólo el primer lote del onboarding deja a la persona en el paso 2.
+      if (pasoBackend === 2) setTerminandoLotes(true);
       setEstablecimiento(e => e ? { ...e, onboardingCompleted: true } : e);
       void recargar();
       return getCurrentUser();
@@ -412,6 +419,7 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
     if (creados.length) {
       setLotes((actuales) => [...actuales, ...creados]);
       setSelectedLoteId(creados[0].id);
+      if (pasoBackend === 2) setTerminandoLotes(true);
       setEstablecimiento(e => e ? { ...e, onboardingCompleted: true } : e);
       void recargar();
       const user = await getCurrentUser().catch(() => null);
@@ -559,7 +567,8 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
   }, [ordenPastoreo, lotesActivos]);
 
   // La pantalla de carga y la de error van solas, sin el dock encima.
-  useOcultarDock(datosCargando || Boolean(datosError));
+  // Y mientras se marcan los lotes iniciales, el dock espera al "Listo".
+  useOcultarDock(datosCargando || Boolean(datosError) || Boolean(onboardingStep));
 
   if (datosCargando) return <FondoCarga mensaje="Cargando tus datos..." />;
   if (datosError) return (
@@ -578,7 +587,7 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
   );
 
   return <div className="relative flex h-screen w-screen">
-    <Sidebar onSeleccionMultipleChange={setLotesSeleccionados} establecimiento={establecimiento} lotes={lotes} resultadosSatelitales={resultados} analizandoSatelite={analizando} showInactivos={showInactivos} selectedLoteId={selectedLoteId} drawMode={drawMode} editingBoundary={editingBoundary} editingLoteId={editingLoteId} onboardingStep={onboardingStep} guardando={guardando} onToggleFavorito={toggleFavorito} onActualizarSeleccionados={actualizarSeleccionados} operacionBatch={operacionBatch} batchBloqueado={Boolean(operacionBatch) || analizando || climaConsultando || guardando || drawMode !== "idle" || editingBoundary || Boolean(editingLoteId)} onToggleShowInactivos={() => setShowInactivos((v) => !v)} onSelectLote={selectLote} onOpenFicha={openFicha} onStartDrawEstablecimiento={startEstablecimiento} onStartDrawLote={startLote} onCancelDraw={cancelDraw} onSaveEditBoundary={() => mapRef.current?.saveEditBoundary()} onCancelEditBoundary={() => { mapRef.current?.cancelEditBoundary(); setEditingBoundary(false); }} onStartEditLote={startEditLote} onSaveEditLote={saveEditLote} onCancelEditLote={cancelEditLote} puedeDeshacerLote={puedeDeshacerLote} onDeshacerEditLote={() => mapRef.current?.deshacerEditLote()} onRenameLote={(id) => setModal({ type: "rename-lote", loteId: id })} onToggleActivoLote={toggleActivo} onDeleteLote={(id) => setModal({ type: "confirm-delete-lote", loteId: id })} usuarioNombre={membresia?.nombreOperativo ?? 'Cuenta operativa'} onLogout={onLogout} iaDisponible={iaConfigurada} iaGenerando={iaGenerando} iaError={iaError} onSugerirLotes={generarSugerencias} panelSugerencias={sugerencias.length > 0 ? (
+    <Sidebar onSeleccionMultipleChange={setLotesSeleccionados} establecimiento={establecimiento} lotes={lotes} resultadosSatelitales={resultados} analizandoSatelite={analizando} showInactivos={showInactivos} selectedLoteId={selectedLoteId} drawMode={drawMode} editingBoundary={editingBoundary} editingLoteId={editingLoteId} onboardingStep={onboardingStep} fasePasturas={fasePasturas} onListoLotes={() => setFasePasturas(true)} onTerminarOnboarding={() => { setFasePasturas(false); setTerminandoLotes(false); }} guardando={guardando} onToggleFavorito={toggleFavorito} onActualizarSeleccionados={actualizarSeleccionados} operacionBatch={operacionBatch} batchBloqueado={Boolean(operacionBatch) || analizando || climaConsultando || guardando || drawMode !== "idle" || editingBoundary || Boolean(editingLoteId)} onToggleShowInactivos={() => setShowInactivos((v) => !v)} onSelectLote={selectLote} onOpenFicha={openFicha} onStartDrawEstablecimiento={startEstablecimiento} onStartDrawLote={startLote} onCancelDraw={cancelDraw} onSaveEditBoundary={() => mapRef.current?.saveEditBoundary()} onCancelEditBoundary={() => { mapRef.current?.cancelEditBoundary(); setEditingBoundary(false); }} onStartEditLote={startEditLote} onSaveEditLote={saveEditLote} onCancelEditLote={cancelEditLote} puedeDeshacerLote={puedeDeshacerLote} onDeshacerEditLote={() => mapRef.current?.deshacerEditLote()} onRenameLote={(id) => setModal({ type: "rename-lote", loteId: id })} onToggleActivoLote={toggleActivo} onDeleteLote={(id) => setModal({ type: "confirm-delete-lote", loteId: id })} usuarioNombre={membresia?.nombreOperativo ?? 'Cuenta operativa'} onLogout={onLogout} iaDisponible={iaConfigurada} iaGenerando={iaGenerando} iaError={iaError} onSugerirLotes={generarSugerencias} panelSugerencias={sugerencias.length > 0 ? (
       <SugerenciasPanel
         variante={onboardingStep ? "vidrio" : "claro"}
         sugerencias={sugerencias}
@@ -622,7 +631,6 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
       />
     )}
     <main className="relative h-full flex-1">
-      {ordenPastoreo.estado === "ok" && lotesActivos.length > 0 && <MapaLeyendaCondicion />}
       {/* Centrar va abajo a la izquierda del mapa y acompaña a la sidebar: al
           esconderla se corre a la esquina con la misma animación. */}
       {establecimiento && !onboardingStep && (
@@ -704,7 +712,7 @@ export default function PantallaMapaEstablecimiento({ usuario, onUserUpdated, on
       </div>
       <MapView lotesSeleccionados={lotesSeleccionados} ref={mapRef} establecimiento={establecimiento} lotesVisibles={lotesVisiblesParaMapa} lotesActivos={lotesActivos} selectedLoteId={selectedLoteId} condicionPorLote={condicionPorLote} onEstablecimientoDrawn={onEstablecimientoDrawn} onLoteDrawn={onLoteDrawn} onBoundaryEdited={onBoundaryEdited} onLoteEdited={onLoteEdited} onPuedeDeshacerLoteChange={setPuedeDeshacerLote} onSelectLote={selectLote} onGpsLoteConfirmado={setGpsLoteDetectado} sugerencias={sugerencias} sugerenciasExcluidas={sugerenciasExcluidas} sugerenciaEnEdicionId={sugerenciaEnEdicionId} onToggleSugerencia={toggleSugerencia} onSugerenciaEditada={onSugerenciaEditada} />
     </main>
-    {modal?.type === "nombre-establecimiento" && <PromptModal title="Nombrá tu establecimiento" label="Nombre" placeholder="Ej. Estancia Los Álamos" confirmText="Crear" onConfirm={confirmModal} onCancel={() => setModal(null)} />}
+    {modal?.type === "nombre-establecimiento" && <PromptModal volanta="Establecimiento" title="Nombrá tu establecimiento" descripcion="Es el nombre con el que vas a ver tu campo en RODEO. Podés cambiarlo después." label="Nombre" placeholder="Ej. Estancia Los Álamos" confirmText="Crear" onConfirm={confirmModal} onCancel={() => setModal(null)} />}
     {modal?.type === "rename-establecimiento" && establecimiento && <PromptModal title="Renombrar establecimiento" label="Nombre" initialValue={establecimiento.nombre} onConfirm={confirmModal} onCancel={() => setModal(null)} />}
     {modal?.type === "rename-lote" && <PromptModal title="Apodo del lote" label="Apodo" placeholder="Ej. Molino" initialValue={lotes.find((lote) => lote.id === modal.loteId)?.apodo ?? ""} onConfirm={confirmModal} onCancel={() => setModal(null)} />}
     {modal?.type === "confirm-delete-lote" && (() => { const lote = lotes.find(item => item.id === modal.loteId); return <ConfirmModal title="Eliminar lote" confirmText="Eliminar lote" message={lote ? `Lote ${lote.numero}${lote.apodo ? ` · ${lote.apodo}` : ''} deja de usarse en el establecimiento. No se borra: su historial de imágenes, clima y usos se conserva.` : 'Este lote deja de usarse y conserva su historial.'} onConfirm={confirmDeleteLote} onCancel={() => setModal(null)} />; })()}
