@@ -1,18 +1,18 @@
-import FraseConAyuda from "./ui/FraseConAyuda";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { obtenerEstimacionesForraje, type CondicionPastoreo, type DiaCondicion, type EstimacionForraje, type LoteOrdenado } from "../api/estimacion";
-import { CONDICION_PASTOREO, ORDEN_CONDICION, esPiso, fechaCorta, progresoRegeneracion, resumirCondicion, type ResumenCondicion } from "../estimacion/presentacion";
+import { obtenerEstimacionesForraje, type CondicionPastoreo, type EstimacionForraje, type LoteOrdenado } from "../api/estimacion";
+import { CONDICION_PASTOREO, ORDEN_CONDICION, resumirCondicion, type ResumenCondicion } from "../estimacion/presentacion";
 import { useEstablecimiento } from "../hooks/useEstablecimiento";
 import type { EstadoOrdenPastoreo } from "../hooks/useOrdenPastoreo";
 import CompletarDatosLote, { type AccionesCompletarLote } from "./CompletarDatosLote";
+import LoteExpandido from "./LoteExpandido";
 import { NOMBRES_PASTURA, type Lote } from "../types";
 import AvisoInfo from "./ui/AvisoInfo";
 import Panel from "./ui/Panel";
 import IconoFiltro from "./ui/IconoFiltro";
 import { haceCuanto } from "../utils/notification-presentation";
-import { CATEGORIA_CHIP, MUTED, MUTED_SMALL, categoriaChipStyle } from "./ui/ranking";
+import { MUTED, MUTED_SMALL } from "./ui/ranking";
 
 interface CondicionPanelProps extends AccionesCompletarLote {
   lotesActivos: Lote[];
@@ -40,6 +40,9 @@ const OPCIONES_FILTRO: { clave: ClaveFiltro; etiqueta: string; color: string }[]
 
 type EstadoEstimacion = { estado: "ok"; estimacion: EstimacionForraje } | { estado: "error"; mensaje: string };
 
+/** Última respuesta por establecimiento y lotes: al volver al mapa se muestra al instante y se refresca por detrás. */
+const ultimasEstimaciones = new Map<string, Record<string, EstadoEstimacion>>();
+
 function nombreLote(lote: Lote): string {
   return lote.apodo ? `Lote ${lote.numero} — ${lote.apodo}` : `Lote ${lote.numero}`;
 }
@@ -54,155 +57,126 @@ function resumenDe(lote: Lote, estado: EstadoEstimacion | undefined, dia: string
   return resumirCondicion(lote, estado?.estimacion ?? null, dia);
 }
 
-/** Hoy y los próximos días en colores: se entiende sin leer números. */
-function TiraDias({ condiciones, dia, esMinimo }: { condiciones: DiaCondicion[]; dia: string; esMinimo: boolean }) {
-  const dias = condiciones.filter((condicion) => condicion.fecha >= dia).slice(0, 10);
-  if (dias.length < 2) return null;
-  return (
-    <div className="mt-3">
-      <div className="flex gap-[3px]" role="img" aria-label="Condición estimada de hoy y los próximos días">
-        {dias.map((condicion) => (
-          <div
-            key={condicion.fecha}
-            className="flex min-w-0 flex-1 flex-col items-center gap-1"
-            title={`${fechaCorta(condicion.fecha)} · ${esPiso(esMinimo, condicion.condicion) ? "como mínimo " : ""}${CONDICION_PASTOREO[condicion.condicion].texto}${condicion.climaUsado === "pronostico" ? " · según pronóstico" : ""}`}
-          >
-            <div className="h-2.5 w-full rounded-full" style={{ background: CONDICION_PASTOREO[condicion.condicion].color }} />
-            <span className={`text-[0.58rem] leading-none ${condicion.fecha === dia ? "font-bold text-gray-700" : "text-gray-400"}`}>
-              {condicion.fecha === dia ? "hoy" : Number(condicion.fecha.slice(8, 10))}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Regeneración del Figma: etiqueta y valor arriba, pista de 8 px debajo. Perfecto lleva degradé verde. */
-function BarraRegeneracion({ progreso, color, esPerfecto }: { progreso: number; color: string; esPerfecto: boolean }) {
-  const porcentaje = Math.min(100, Math.max(0, Math.round(progreso * 100)));
-  return (
-    <div className="flex flex-col gap-[7px] text-[13px] leading-4 tracking-[-0.03em]">
-      <div className="flex items-center justify-between">
-        <span className="text-[#4B5550]">Regeneración</span>
-        <span className="font-semibold text-black tabular-nums">{porcentaje}%</span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded bg-[rgba(15,26,20,0.1)]" role="presentation">
-        <div className="h-full rounded" style={{ width: `${porcentaje}%`, background: esPerfecto ? "linear-gradient(90deg, #8FE472 0%, #3FAE45 100%)" : color }} />
-      </div>
-    </div>
-  );
-}
-
-function CardCondicion({ lote, estado, ordenado, dia, seleccionado, onSelect, acciones, establecimientoId }: {
-  lote: Lote; estado: EstadoEstimacion | undefined; ordenado: LoteOrdenado | undefined; dia: string; seleccionado: boolean; onSelect: () => void; acciones: AccionesCompletarLote; establecimientoId: string;
-}) {
-  const resumen = resumenDe(lote, estado, dia);
-  const reingreso = estado?.estado === "ok" ? estado.estimacion.reingreso : null;
-  const color = resumen.condicion ? CONDICION_PASTOREO[resumen.condicion].color : GRIS;
-  const progreso = progresoRegeneracion(reingreso, ordenado);
-
-  return (
-    // Tarjeta del frame "Condición / Tarjeta" del Figma: vidrio claro con borde verde.
-    <div
-      className={`flex cursor-pointer flex-col gap-3.5 rounded-[25px] border-2 border-[#79DA58] bg-white/40 py-[18px] pr-4 pl-5 backdrop-blur-[12.5px] transition-shadow ${seleccionado ? "shadow-[0_0_0_2px_#79DA58_inset]" : "hover:shadow-[0_0_0_1px_#79DA58_inset]"}`}
-      onClick={onSelect}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-[17px] leading-[22px] tracking-[-0.03em] text-black">
-          {ordenado && <span className="font-medium text-black/35 tabular-nums">{ordenado.posicion}.</span>}
-          <span className="min-w-0 truncate font-semibold">{nombreLote(lote)}</span>
-          {lote.tipoPastura && <span className="text-[0.75rem] font-normal text-gray-500">{NOMBRES_PASTURA[lote.tipoPastura]}</span>}
-        </span>
-        {/* Abre la ficha; el clic de la tarjeta selecciona el lote en el mapa. */}
-        <Link
-          to={`/establecimientos/${establecimientoId}/lotes/${lote.id}`}
-          onClick={(evento) => evento.stopPropagation()}
-          className="foco-campo flex h-[29px] flex-none items-center justify-center whitespace-nowrap rounded-[10px] border border-[#79DA58] bg-[rgba(151,234,124,0.6)] px-[9px] font-[Helvetica,Arial,sans-serif] text-[15px] tracking-[-0.06em] text-black no-underline transition-colors duration-150 hover:bg-[rgba(151,234,124,0.9)]"
-        >
-          Ver ficha
-        </Link>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {resumen.prefijo && <span className="block text-[0.62rem] font-semibold tracking-[0.06em] text-gray-500 uppercase">{resumen.prefijo}</span>}
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-flex h-6 items-center gap-1.5 rounded-full py-1 pr-[11px] pl-[9px] text-[13px] leading-4 font-medium tracking-[-0.03em] text-black"
-            style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}
-          >
-            <i aria-hidden="true" className="inline-block h-[7px] w-[7px] rounded-full" style={{ background: color }} />
-            {resumen.titulo}
-          </span>
-          {resumen.nota && <AvisoInfo titulo="Sin pastoreos registrados">{resumen.nota}</AvisoInfo>}
-        </div>
-        {resumen.frase && <p className="m-0 text-sm leading-5 tracking-[-0.03em] text-[#2B2B2B]"><FraseConAyuda frase={resumen.frase} ayuda={resumen.ayudaFecha} /></p>}
-      </div>
-
-      {progreso !== null && <BarraRegeneracion progreso={progreso} color={color} esPerfecto={resumen.condicion === "perfecto"} />}
-
-      {resumen.condicion && reingreso && <TiraDias condiciones={reingreso.condiciones} dia={dia} esMinimo={reingreso.esMinimo} />}
-
-      {ordenado && <DatosDelOrden lote={ordenado} />}
-
-      {ordenado?.falta && <CompletarDatosLote loteId={lote.id} falta={ordenado.falta} {...acciones} />}
-    </div>
-  );
-}
-
+const FILAS_POR_GRUPO = 8;
 /**
- * La respuesta corta: en qué está cada lote hoy. Agrupa por la condición
- * estimada —la misma etiqueta de la pastilla de cada tarjeta— y no por el grupo
- * del orden, para que la fila diga lo mismo que la card de abajo.
+ * La respuesta corta: cuántos lotes hay en cada condición hoy, en una barra y
+ * con los conteos. La condición es la misma de la fila de abajo; el satélite no
+ * interviene.
  */
-function ResumenDelDia({ lotes, claveDe, leyenda, onSelectLote }: {
-  lotes: Lote[]; claveDe: (lote: Lote) => ClaveFiltro; leyenda: string; onSelectLote: (id: string) => void;
-}) {
+function ResumenDelDia({ lotes, claveDe, leyenda }: { lotes: Lote[]; claveDe: (lote: Lote) => ClaveFiltro; leyenda: string }) {
   const filas = [...ORDEN_CONDICION, "sin-estimacion" as const]
-    .map((clave) => [clave, lotes.filter((lote) => claveDe(lote) === clave)] as const)
-    .filter(([, lotesDeLaFila]) => lotesDeLaFila.length > 0);
+    .map((clave) => [clave, lotes.filter((lote) => claveDe(lote) === clave).length] as const)
+    .filter(([, cantidad]) => cantidad > 0);
   if (filas.length === 0) return null;
+  const colorDe = (clave: ClaveFiltro) => (clave === "sin-estimacion" ? GRIS : CONDICION_PASTOREO[clave].color);
   return (
     <div className="rounded-2xl border-2 border-[var(--color-lima)] bg-white p-3.5">
-      <div className="mb-2 flex items-center gap-1.5">
-        <p className="m-0 text-[0.68rem] font-bold tracking-[0.08em] text-gray-400 uppercase">Hoy en el campo, en orden</p>
+      <div className="mb-2.5 flex items-center gap-1.5">
+        <p className="m-0 text-[0.68rem] font-bold tracking-[0.08em] text-gray-400 uppercase">Hoy en el campo</p>
         <AvisoInfo tono="info" titulo="De dónde sale">
           <p className="m-0 mb-1">Estimación provisional con el clima, el tipo de pastura y el último pastoreo de cada lote. No es una medición.</p>
           <p className="m-0">No es lo mismo que el color del lote en el mapa: ese es el verdor que vio el satélite. Acá se calcula cuánto descansó el pasto, y el satélite no interviene.</p>
         </AvisoInfo>
       </div>
-      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-        {filas.map(([clave, lotesDeLaFila]) => {
-          const { texto, color } = clave === "sin-estimacion"
-            ? { texto: "Sin datos", color: GRIS }
-            : { texto: CONDICION_PASTOREO[clave].corto, color: CONDICION_PASTOREO[clave].color };
-          return (
-            <li key={clave} className="flex items-center gap-2 text-[0.8rem]">
-              <span
-                className={`${CATEGORIA_CHIP} inline-flex w-24 flex-none items-center gap-1.5`}
-                style={categoriaChipStyle(color)}
-              >
-                <i aria-hidden="true" className="inline-block h-1.5 w-1.5 flex-none rounded-full" style={{ background: color }} />
-                {texto}
-              </span>
-              <span className="min-w-0">
-                {lotesDeLaFila.map((lote, i) => (
-                  <span key={lote.id}>
-                    <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-gray-800 hover:underline" onClick={() => onSelectLote(lote.id)}>
-                      Lote {lote.numero}
-                    </button>
-                    {i < lotesDeLaFila.length - 1 ? ", " : ""}
-                  </span>
-                ))}
-              </span>
-            </li>
-          );
-        })}
+      <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={filas.map(([clave, cantidad]) => `${clave === "sin-estimacion" ? "Sin datos" : CONDICION_PASTOREO[clave].texto}: ${cantidad}`).join(", ")}>
+        {filas.map(([clave, cantidad]) => <span key={clave} style={{ flex: cantidad, background: colorDe(clave) }} />)}
+      </div>
+      <ul className="m-0 mt-2.5 flex list-none flex-wrap gap-x-3.5 gap-y-1 p-0">
+        {filas.map(([clave, cantidad]) => (
+          <li key={clave} className="flex items-center gap-1.5 text-[0.78rem] text-gray-700">
+            <i aria-hidden="true" className="inline-block h-2 w-2 rounded-[2px]" style={{ background: colorDe(clave) }} />
+            {clave === "sin-estimacion" ? "Sin datos" : CONDICION_PASTOREO[clave].corto}
+            <b className="tabular-nums text-gray-900">{cantidad}</b>
+          </li>
+        ))}
       </ul>
-      <p className="m-0 mt-2 text-[0.68rem] font-semibold text-gray-500">{leyenda}</p>
+      <p className="m-0 mt-2.5 text-[0.68rem] font-semibold text-gray-500">{leyenda}</p>
     </div>
   );
 }
+
+/**
+ * Un lote dentro de su grupo: nombre, condición y una flecha que despliega el
+ * panel con la miniatura y la regeneración. Lo que falta cargar se ofrece
+ * siempre a la vista, porque es lo único que pide acción.
+ */
+function FilaCondicion({ lote, estado, ordenado, dia, seleccionado, onSelect, acciones, establecimientoId }: {
+  lote: Lote; estado: EstadoEstimacion | undefined; ordenado: LoteOrdenado | undefined; dia: string; seleccionado: boolean; onSelect: () => void; acciones: AccionesCompletarLote; establecimientoId: string;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  const resumen = resumenDe(lote, estado, dia);
+  const color = resumen.condicion ? CONDICION_PASTOREO[resumen.condicion].color : GRIS;
+  return (
+    <div className={`rounded-xl border bg-white p-2.5 transition-shadow ${seleccionado ? "border-[#79DA58] shadow-[0_0_0_1px_#79DA58]" : "border-gray-200"}`}>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onSelect} className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left">
+          <span className="flex min-w-0 items-baseline gap-1.5 text-[0.9rem] tracking-[-0.02em] text-black">
+            {ordenado && <span className="font-medium text-black/35 tabular-nums">{ordenado.posicion}.</span>}
+            <span className="truncate font-semibold">{nombreLote(lote)}</span>
+            {lote.tipoPastura && <span className="text-[0.72rem] font-normal text-gray-500">{NOMBRES_PASTURA[lote.tipoPastura]}</span>}
+          </span>
+          <span
+            className="mt-1 inline-flex h-5 items-center gap-1.5 rounded-full py-0.5 pr-2.5 pl-2 text-[0.74rem] font-medium text-black"
+            style={{ background: `color-mix(in srgb, ${color} 14%, transparent)` }}
+          >
+            {resumen.titulo}
+          </span>
+        </button>
+        {resumen.nota && <AvisoInfo titulo="Sin pastoreos registrados">{resumen.nota}</AvisoInfo>}
+        <Link
+          to={`/establecimientos/${establecimientoId}/lotes/${lote.id}`}
+          className="foco-campo flex h-7 flex-none items-center rounded-full border border-[#79DA58] bg-[rgba(151,234,124,0.6)] px-2.5 text-[0.74rem] font-medium text-black no-underline transition-colors duration-150 hover:bg-[rgba(151,234,124,0.9)]"
+        >
+          Ver ficha
+        </Link>
+        <button
+          type="button"
+          onClick={() => setAbierta((actual) => !actual)}
+          aria-expanded={abierta}
+          aria-label={abierta ? `Ocultar el detalle de ${nombreLote(lote)}` : `Ver el detalle de ${nombreLote(lote)}`}
+          className="foco-campo grid size-7 flex-none cursor-pointer place-items-center rounded-full border-0 bg-transparent text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`transition-transform duration-150 ${abierta ? "rotate-90" : ""}`}>
+            <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      {abierta && <LoteExpandido establecimientoId={establecimientoId} lote={lote} />}
+      {ordenado && <DatosDelOrden lote={ordenado} />}
+      {ordenado?.falta && <CompletarDatosLote loteId={lote.id} falta={ordenado.falta} {...acciones} />}
+    </div>
+  );
+}
+
+/** Un grupo de lotes con la misma condición: título con conteo, plegable, y de a pocos para no ser una lista interminable. */
+function GrupoCondicion({ clave, lotes, abierto, renderFila }: { clave: ClaveFiltro; lotes: Lote[]; abierto: boolean; renderFila: (lote: Lote) => ReactNode }) {
+  const [todos, setTodos] = useState(false);
+  const { texto, color } = clave === "sin-estimacion"
+    ? { texto: "Sin datos", color: GRIS }
+    : { texto: CONDICION_PASTOREO[clave].texto, color: CONDICION_PASTOREO[clave].color };
+  const visibles = todos ? lotes : lotes.slice(0, FILAS_POR_GRUPO);
+  return (
+    <details open={abierto} className="group rounded-2xl border border-[var(--color-campo-100)] bg-[var(--color-campo-50)]/60">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 marker:content-none [&::-webkit-details-marker]:hidden">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="flex-none text-gray-400 transition-transform duration-150 group-open:rotate-90">
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <i aria-hidden="true" className="inline-block h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: color }} />
+        <h4 className="m-0 text-[0.86rem] font-semibold tracking-[-0.01em] text-gray-900">{texto}</h4>
+        <span className="text-[0.78rem] font-semibold text-gray-500 tabular-nums">{lotes.length}</span>
+      </summary>
+      <div className="flex flex-col gap-2 px-2.5 pb-2.5">
+        {visibles.map((lote) => <div key={lote.id}>{renderFila(lote)}</div>)}
+        {lotes.length > FILAS_POR_GRUPO && (
+          <button type="button" onClick={() => setTodos((actual) => !actual)} className="cursor-pointer border-0 bg-transparent p-1 text-left text-[0.74rem] font-semibold text-[var(--color-campo-700)] hover:underline">
+            {todos ? "Ver menos" : `Ver ${lotes.length - FILAS_POR_GRUPO} más`}
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
 
 /** Lo que el orden suma a la card: el piso pesado y el pasto medido hoy. */
 function DatosDelOrden({ lote }: { lote: LoteOrdenado }) {
@@ -257,14 +231,15 @@ export default function CondicionPanel({
   const acciones: AccionesCompletarLote = { onLoteActualizado, onPastoreoRegistrado, onActualizarClima, actualizandoClima };
   const { establecimientoId, puede } = useEstablecimiento();
   const [ocultas, setOcultas] = useState<Set<ClaveFiltro>>(new Set());
-  const [estimaciones, setEstimaciones] = useState<Record<string, EstadoEstimacion>>({});
   const dia = hoy();
   // Pide de nuevo si cambian los lotes o su pastura, no cuando sólo cambia la identidad del array.
-  const claveLotes = lotesActivos.map((lote) => `${lote.id}:${lote.tipoPastura ?? ""}`).join(",");
+  const claveLotes = `${establecimientoId}|${lotesActivos.map((lote) => `${lote.id}:${lote.tipoPastura ?? ""}`).join(",")}`;
+  const [estimaciones, setEstimaciones] = useState<Record<string, EstadoEstimacion>>(() => ultimasEstimaciones.get(claveLotes) ?? {});
 
   useEffect(() => {
     let vigente = true;
-    setEstimaciones({});
+    const guardadas = ultimasEstimaciones.get(claveLotes);
+    setEstimaciones(guardadas ?? {});
     if (lotesActivos.length === 0) return;
     // Una sola llamada para todo el establecimiento: el backend agrupa las consultas.
     obtenerEstimacionesForraje(establecimientoId)
@@ -272,10 +247,11 @@ export default function CondicionPanel({
         if (!vigente) return;
         const porLote: Record<string, EstadoEstimacion> = {};
         for (const item of resultado) porLote[item.loteId] = { estado: "ok", estimacion: item.estimacion };
+        ultimasEstimaciones.set(claveLotes, porLote);
         setEstimaciones(porLote);
       })
       .catch((reason) => {
-        if (!vigente) return;
+        if (!vigente || guardadas) return;
         const mensaje = reason instanceof ApiError ? reason.message : "No se pudo calcular la estimación.";
         setEstimaciones(Object.fromEntries(lotesActivos.map((lote) => [lote.id, { estado: "error", mensaje } satisfies EstadoEstimacion])));
       });
@@ -307,6 +283,12 @@ export default function CondicionPanel({
   }), [lotesActivos, estimaciones, resumenes, ordenados]);
 
   const cargando = lotesActivos.length > 0 && Object.keys(estimaciones).length === 0;
+
+  // Los lotes de cada condición, en el orden de arriba; los grupos tildados en el filtro.
+  const grupos = [...ORDEN_CONDICION, "sin-estimacion" as const]
+    .map((clave) => [clave, ocultas.has(clave) ? [] : ranking.filter((lote) => claveDe(lote) === clave)] as const)
+    .filter(([, lotesDelGrupo]) => lotesDelGrupo.length > 0);
+
 
   const avisoClass = "m-0 rounded-md border border-amber-300 bg-amber-100 p-2.5 text-[0.82rem] leading-normal text-amber-800 [&_code]:rounded [&_code]:bg-black/[0.07] [&_code]:px-1 [&_code]:text-[0.78rem]";
 
@@ -389,16 +371,23 @@ export default function CondicionPanel({
       {cargando && <p className={MUTED_SMALL}>Calculando la condición de los lotes…</p>}
 
       {orden.estado === "error" && <p className={MUTED_SMALL}>No se pudo armar el orden de los lotes: {orden.mensaje}</p>}
-      {!cargando && orden.estado === "ok" && <ResumenDelDia lotes={ranking} claveDe={claveDe} leyenda={orden.orden.leyenda} onSelectLote={onSelectLote} />}
+      {!cargando && orden.estado === "ok" && <ResumenDelDia lotes={ranking} claveDe={claveDe} leyenda={orden.orden.leyenda} />}
+
 
       {lotesActivos.length > 0 && !cargando && (
-        <ol className="m-0 flex list-none flex-col gap-3 p-0">
-          {ranking.map((lote) => ocultas.has(claveDe(lote)) ? null : (
-            <li key={lote.id} className="list-none">
-              <CardCondicion lote={lote} estado={estimaciones[lote.id]} ordenado={ordenados.get(lote.id)} dia={dia} seleccionado={lote.id === selectedLoteId} onSelect={() => onSelectLote(lote.id)} acciones={acciones} establecimientoId={establecimientoId} />
-            </li>
+        <div className="flex flex-col gap-2.5">
+          {grupos.map(([clave, lotesDelGrupo], indice) => (
+            <GrupoCondicion
+              key={clave}
+              clave={clave}
+              lotes={lotesDelGrupo}
+              abierto={indice === 0}
+              renderFila={(lote) => (
+                <FilaCondicion lote={lote} estado={estimaciones[lote.id]} ordenado={ordenados.get(lote.id)} dia={dia} seleccionado={lote.id === selectedLoteId} onSelect={() => onSelectLote(lote.id)} acciones={acciones} establecimientoId={establecimientoId} />
+              )}
+            />
           ))}
-        </ol>
+        </div>
       )}
     </Panel>
   );

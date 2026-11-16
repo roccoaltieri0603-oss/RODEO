@@ -213,6 +213,7 @@ export default function OrdenPastoreoPanel({ orden, lotes, onSelectLote, onVerOr
 
       <div className="flex flex-col gap-3 p-3">
         {visibles.length > 0 ? (
+          <>
           <ol className="m-0 flex list-none flex-col gap-2 p-0">
             {visibles.map((lote) => (
               <CardLote
@@ -230,6 +231,12 @@ export default function OrdenPastoreoPanel({ orden, lotes, onSelectLote, onVerOr
               />
             ))}
           </ol>
+          {candidatos.length > visibles.length && (
+            <button type="button" onClick={onVerOrden} className={ENLACE_VERDE}>
+              {candidatos.length - visibles.length === 1 ? "1 lote más para pastorear hoy" : ` lotes más para pastorear hoy`} →
+            </button>
+          )}
+          </>
         ) : (
           // Nada listo: una sola frase clara y, pegado, cuál viene primero.
           <div className="flex flex-col gap-2">

@@ -32,15 +32,15 @@ const CLASE_TONO: Record<Tono, string> = {
 
 const CANTIDAD = 10;
 
-function Bloque({ tono }: { tono: Tono }) {
+function Bloque({ tono, compacto }: { tono: Tono; compacto: boolean }) {
   return (
-    <span className={`relative grid size-11 shrink-0 place-items-center rounded-md border-[3px] shadow-[0_0_0_1px_rgba(14,21,17,0.7)]${CLASE_TONO[tono]}`}>
-      {tono === "verde" && <span className="size-4 rounded-[3px] border-[3px] border-[#97ea7c] bg-[rgba(255,222,103,0.6)]" />}
+    <span className={`relative grid shrink-0 place-items-center shadow-[0_0_0_1px_rgba(14,21,17,0.7)] ${compacto ? "h-6 min-w-0 flex-1 rounded border-2" : "size-11 rounded-md border-[3px]"} ${CLASE_TONO[tono]}`}>
+      {tono === "verde" && <span className={`border-[#97ea7c] bg-[rgba(255,222,103,0.6)] ${compacto ? "size-2 rounded-[2px] border-2" : "size-4 rounded-[3px] border-[3px]"}`} />}
     </span>
   );
 }
 
-export default function BloquesRegeneracion({ progreso, condicion }: { progreso: number; condicion: CondicionPastoreo | null }) {
+export default function BloquesRegeneracion({ progreso, condicion, compacto = false }: { progreso: number; condicion: CondicionPastoreo | null; compacto?: boolean }) {
   const porcentaje = Math.max(0, Math.round(progreso * 100));
   const llenos = Math.min(CANTIDAD, Math.floor(porcentaje / 10));
   const enCurso = porcentaje < 100 && porcentaje % 10 !== 0 ? 1 : 0;
@@ -53,9 +53,9 @@ export default function BloquesRegeneracion({ progreso, condicion }: { progreso:
     <div
       role="img"
       aria-label={`Avance del estado foliar: ${porcentaje} %${condicion ? `, ${CONDICION_PASTOREO[condicion].texto.toLowerCase()}` : ""}`}
-      className="flex flex-wrap gap-2"
+      className={compacto ? "flex w-full gap-1" : "flex flex-wrap gap-2"}
     >
-      {tonos.map((tono, indice) => <Bloque key={indice} tono={tono} />)}
+      {tonos.map((tono, indice) => <Bloque key={indice} tono={tono} compacto={compacto} />)}
     </div>
   );
 }

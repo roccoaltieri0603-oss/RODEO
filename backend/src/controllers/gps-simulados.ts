@@ -21,11 +21,28 @@ const puntoEnLote = (lat: number, lng: number, lots: Lote[]) => lots.find(l => e
 const contiene = (lat: number, lng: number, polygon: unknown) => esPolygonFeature(polygon)
   && turf.booleanPointInPolygon(turf.point([lng, lat]), polygon as Feature<Polygon>);
 
-function dto(r: Fila, polygon: unknown, lotes: Lote[], incidencias: Incidencia[], userId: string) {
+interface CambioLote { clave: string; loteAnteriorId: string | null; loteActualId: string | null; momento: Date }
+
+/**
+ * El último cambio de lote registrado de cada GPS del usuario. Sale de las
+ * incidencias `gps_simulado_cambio_lote` que ya se guardan al moverlo: no se
+ * agrega ni se guarda nada nuevo, y no es un recorrido (sólo de qué lote a qué lote pasó).
+ */
+async function leerUltimosCambios(db: PoolClient, establecimientoId: string, userId: string): Promise<CambioLote[]> {
+  const result = await db.query<CambioLote>(`SELECT DISTINCT ON (clave) clave,
+      detalles->>'loteAnteriorId' AS "loteAnteriorId", detalles->>'loteActualId' AS "loteActualId", primera_deteccion AS momento
+    FROM incidencias_establecimiento
+    WHERE establecimiento_id=$1 AND tipo='gps_simulado_cambio_lote' AND clave LIKE $2
+    ORDER BY clave, primera_deteccion DESC`, [establecimientoId, `gps:${userId}:%`]);
+  return result.rows;
+}
+
+function dto(r: Fila, polygon: unknown, lotes: Lote[], incidencias: Incidencia[], userId: string, cambios: CambioLote[] = []) {
   const loteActual = puntoEnLote(r.latitud, r.longitud, lotes);
   const loteAsignado = lotes.find(l => l.id === r.lote_asignado_id) ?? null;
   const clave = CLAVE(userId, r.id);
   const activas = incidencias.filter(i => i.clave === clave).map(i => i.tipo);
+  const cambio = cambios.find(c => c.clave === clave && c.loteActualId);
   return {
     id: r.id, numero: r.numero, identificadorEquipo: r.id, apodo: r.apodo,
     latitud: r.latitud, longitud: r.longitud, bateriaPorcentaje: r.bateria_porcentaje,
@@ -36,6 +53,7 @@ function dto(r: Fila, polygon: unknown, lotes: Lote[], incidencias: Incidencia[]
     loteActual: loteActual ? { id: loteActual.id, numero: loteActual.numero, apodo: loteActual.apodo } : null,
     loteAsignado: loteAsignado ? { id: loteAsignado.id, numero: loteAsignado.numero, apodo: loteAsignado.apodo } : null,
     dentroEstablecimiento: contiene(r.latitud, r.longitud, polygon), incidenciasActivas: activas,
+    ultimoCambioLote: cambio ? { loteAnteriorId: cambio.loteAnteriorId, loteActualId: cambio.loteActualId, momento: cambio.momento } : null,
   };
 }
 
@@ -80,8 +98,9 @@ export async function listarGpsSimulados(req: Request, res: Response): Promise<v
     const rows = await db.query<Fila>('SELECT * FROM gps_simulados WHERE establecimiento_id=$1 AND user_id=$2 ORDER BY numero', [m.establecimientoId, m.userId]);
     const lotes = await lotesActivos(db, m.establecimientoId);
     const incidencias = await leerIncidencias(db, m.establecimientoId, m.userId);
+    const cambios = await leerUltimosCambios(db, m.establecimientoId, m.userId);
     await db.query('COMMIT');
-    res.json({ dispositivos: rows.rows.map(r => dto(r, e.rows[0].polygon, lotes, incidencias, m.userId)) });
+    res.json({ dispositivos: rows.rows.map(r => dto(r, e.rows[0].polygon, lotes, incidencias, m.userId, cambios)) });
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { db.release(); }
 }
@@ -152,11 +171,13 @@ export async function actualizarGpsSimulado(req: Request, res: Response): Promis
     if (posicionCambio) {
       const beforeLot = puntoEnLote(old.latitud, old.longitud, al.lots);
       const afterLot = puntoEnLote(actual.latitud, actual.longitud, al.lots);
-      if (beforeLot && afterLot && beforeLot.id !== afterLot.id) await notificarCambioLote(db, gps, beforeLot, afterLot);
+      // Entrar a un lote desde afuera de todos también se avisa; sólo la salida de un lote queda sin aviso.
+      if (afterLot && beforeLot?.id !== afterLot.id) await notificarCambioLote(db, gps, beforeLot, afterLot);
     }
     const incidencias = await leerIncidencias(db, m.establecimientoId, m.userId);
+    const cambios = await leerUltimosCambios(db, m.establecimientoId, m.userId);
     await db.query('COMMIT');
-    res.json({ dispositivo: dto(actual, al.polygon, al.lots, incidencias, m.userId) });
+    res.json({ dispositivo: dto(actual, al.polygon, al.lots, incidencias, m.userId, cambios) });
   } catch (error) { await db.query('ROLLBACK'); throw error; }
   finally { db.release(); }
 }

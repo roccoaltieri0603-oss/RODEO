@@ -17,14 +17,21 @@ export default function GpsSimulado({ lotesActivos, onLoteConfirmado }: Props) {
   const itemsRef = useRef(items); itemsRef.current = items;
   const lotesRef = useRef(lotesActivos); lotesRef.current = lotesActivos;
   const loteCallbackRef = useRef(onLoteConfirmado); loteCallbackRef.current = onLoteConfirmado;
+  // El establecimiento se vuelve a pedir cada 30 s y al volver a la pestaña: llega
+  // como objeto nuevo aunque no cambie. Se lee por ref para no desarmar los puntos.
+  const poligonoRef = useRef(establecimiento?.polygon); poligonoRef.current = establecimiento?.polygon;
+  // El lote detectado sobrevive a que se vuelvan a dibujar los puntos: si sigue
+  // en el mismo lote, el aviso no se apaga ni vuelve a esperar los 3 segundos.
+  const loteActualIdRef = useRef<string | null>(null);
+  useEffect(() => () => { loteCallbackRef.current(null); }, []);
   const puedeVer = membresia?.rol === "PROPIETARIO" || membresia?.permisos.includes("ver_dispositivos_gps");
   const puedeEditar = membresia?.rol === "PROPIETARIO" || membresia?.permisos.includes("modificar_dispositivos_gps");
   useEffect(() => {
-    let vigente = true; let markers: L.Marker[] = []; let timeoutId: number | null = null; let loteActualId: string | null = null;
+    let vigente = true; let markers: L.Marker[] = []; let timeoutId: number | null = null;
     const evaluarLote = (latlng: L.LatLng) => {
       const lote = lotesRef.current.find((item) => turf.booleanPointInPolygon(turf.point([latlng.lng, latlng.lat]), item.polygon)) ?? null;
-      if (lote?.id === loteActualId) return;
-      loteActualId = lote?.id ?? null;
+      if ((lote?.id ?? null) === loteActualIdRef.current) return;
+      loteActualIdRef.current = lote?.id ?? null;
       if (timeoutId !== null) window.clearTimeout(timeoutId);
       timeoutId = null;
       loteCallbackRef.current(null);
@@ -49,7 +56,7 @@ export default function GpsSimulado({ lotesActivos, onLoteConfirmado }: Props) {
       const device = itemsRef.current[index];
       const p = marker.getLatLng();
         if (device.numero === 1) evaluarLote(p);
-      const polygon = establecimiento?.polygon;
+      const polygon = poligonoRef.current;
       const afuera = polygon && !turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), polygon);
       // Un window.confirm nativo rompía con el resto del diseño. El modal propio
       // se resuelve con una promesa para poder esperarlo acá adentro, que es un
@@ -66,8 +73,9 @@ export default function GpsSimulado({ lotesActivos, onLoteConfirmado }: Props) {
     const primero = devices.find((device) => device.numero === 1);
     if (primero) evaluarLote(L.latLng(primero.latitud!, primero.longitud!));
     }).catch(() => { if (vigente) setError("No se pudieron cargar los GPS simulados."); });
-    return () => { vigente = false; if (timeoutId !== null) window.clearTimeout(timeoutId); loteCallbackRef.current(null); map.dragging.enable(); markers.forEach((m) => m.remove()); };
-  }, [map, establecimientoId, puedeEditar, puedeVer, establecimiento?.polygon]);
+    // Si quedó una espera de 3 s a medias, se olvida el lote para que la próxima vuelta la empiece de nuevo.
+    return () => { vigente = false; if (timeoutId !== null) { window.clearTimeout(timeoutId); loteActualIdRef.current = null; } map.dragging.enable(); markers.forEach((m) => m.remove()); };
+  }, [map, establecimientoId, puedeEditar, puedeVer]);
   function responder(ok: boolean) {
     confirmacion?.resolver(ok);
     setConfirmacion(null);

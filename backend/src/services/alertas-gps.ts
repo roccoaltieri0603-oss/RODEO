@@ -103,14 +103,23 @@ export async function evaluarLoteAsignado(db: PoolClient, gps: ContextoGps, lote
   else await abrir(db, gps, 'gps_simulado_fuera_lote_asignado', `está fuera de su lote asignado, Lote ${lote.numero}${lote.apodo ? ` (${lote.apodo})` : ''}`, { loteAsignadoId: lote.id, numeroLoteAsignado: lote.numero });
 }
 
-export async function notificarCambioLote(db: PoolClient, gps: ContextoGps, anterior: { id: string; numero: number; apodo: string | null }, actual: { id: string; numero: number; apodo: string | null }): Promise<void> {
-  const nombres = (lote: { numero: number; apodo: string | null }) => `Lote ${lote.numero}${lote.apodo ? ` (${lote.apodo})` : ''}`;
-  const source = `${rotulo(gps)} pasó de ${nombres(anterior)} a ${nombres(actual)}. Simulación de GPS · no es telemetría real.`;
+/**
+ * Aviso de lote del GPS personal, con la misma forma que tenía el del marcador
+ * único: "Tu ganado se ha desplazado de lote", los dos lotes con flecha y el
+ * botón para verlo en el mapa. `anterior` es null cuando el punto venía de
+ * afuera de todos los lotes (por ejemplo, de un camino): igual se avisa que
+ * entró. Siempre rotulado como simulación.
+ */
+export async function notificarCambioLote(db: PoolClient, gps: ContextoGps, anterior: { id: string; numero: number; apodo: string | null } | null, actual: { id: string; numero: number; apodo: string | null }): Promise<void> {
+  const titulo = anterior ? 'Tu ganado se ha desplazado de lote' : 'Tu ganado está en un lote';
+  const mensaje = `${rotulo(gps)} · Simulación de GPS, no es un dato real.`;
   await resolver(db, gps, ['gps_simulado_cambio_lote']);
   const details = { origen: 'gps_personal', dispositivoId: gps.dispositivoId, numero: gps.numero, apodo: gps.apodo,
-    simulacion: true, loteAnteriorId: anterior.id, loteActualId: actual.id, titulo: `${rotulo(gps)} · Cambio de lote`, mensaje: source };
+    simulacion: true, loteAnteriorId: anterior?.id ?? null, loteActualId: actual.id, titulo, mensaje,
+    referenciaLote: { numero: actual.numero, apodo: actual.apodo },
+    loteAnterior: anterior ? { numero: anterior.numero, apodo: anterior.apodo } : null };
   await mantenerIncidenciaActiva(db, { establecimientoId: gps.establecimientoId, tipo: 'gps_simulado_cambio_lote',
-    clave: clave(gps), detalles: details, titulo: details.titulo, mensaje: source });
+    clave: clave(gps), detalles: details, titulo, mensaje, loteId: actual.id });
   await resolver(db, gps, ['gps_simulado_cambio_lote']);
 }
 

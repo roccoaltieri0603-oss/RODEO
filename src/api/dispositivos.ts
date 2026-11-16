@@ -37,6 +37,8 @@ export interface Dispositivo {
   loteActual?: { id: string; numero: number; apodo: string | null } | null;
   loteAsignado?: { id: string; numero: number; apodo: string | null } | null;
   incidenciasActivas?: string[];
+  /** Último cambio de lote registrado (de qué lote a cuál y cuándo). No es un recorrido. */
+  ultimoCambioLote?: { loteAnteriorId: string | null; loteActualId: string; momento: string } | null;
 }
 
 export interface MuestraBateria { momento: string; porcentaje: number }

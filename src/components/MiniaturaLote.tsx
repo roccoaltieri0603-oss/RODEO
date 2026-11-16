@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import L from "leaflet";
-import { AttributionControl, CircleMarker, GeoJSON, MapContainer, TileLayer } from "react-leaflet";
+import { AttributionControl, CircleMarker, GeoJSON, MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { PolygonFeature } from "../types";
 
 /**
@@ -13,7 +13,27 @@ import type { PolygonFeature } from "../types";
  */
 const MAXIMO_VERTICES_VISIBLES = 12;
 
-export default function MiniaturaLote({ poligono, className = "" }: { poligono: PolygonFeature; className?: string }) {
+/**
+ * Leaflet mide su contenedor al crearse. Si la miniatura nace dentro de una
+ * solapa escondida mide 0 y queda gris; cuando cambia de tamaño (al mostrarse)
+ * se vuelve a medir y a encuadrar el lote.
+ */
+function Reencuadrar({ limites, relleno }: { limites: L.LatLngBounds; relleno: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const contenedor = map.getContainer();
+    const observador = new ResizeObserver(() => {
+      if (contenedor.clientWidth === 0 || contenedor.clientHeight === 0) return;
+      map.invalidateSize();
+      map.fitBounds(limites, { padding: [relleno, relleno] });
+    });
+    observador.observe(contenedor);
+    return () => observador.disconnect();
+  }, [map, limites, relleno]);
+  return null;
+}
+
+export default function MiniaturaLote({ poligono, className = "", relleno = 48 }: { poligono: PolygonFeature; className?: string; relleno?: number }) {
   const limites = useMemo(() => L.geoJSON(poligono).getBounds(), [poligono]);
   const vertices = useMemo(() => {
     const anillo = poligono.geometry.coordinates[0] ?? [];
@@ -27,10 +47,10 @@ export default function MiniaturaLote({ poligono, className = "" }: { poligono: 
   }
 
   return (
-    <div className={`overflow-hidden ${className}`}>
+    <div className={`relative isolate overflow-hidden ${className}`}>
       <MapContainer
         bounds={limites}
-        boundsOptions={{ padding: [48, 48] }}
+        boundsOptions={{ padding: [relleno, relleno] }}
         zoomSnap={0}
         maxZoom={19}
         dragging={false}
@@ -44,6 +64,7 @@ export default function MiniaturaLote({ poligono, className = "" }: { poligono: 
         style={{ height: "100%", width: "100%", background: "#1b2420" }}
       >
         {/* El crédito de Esri no se saca: lo piden sus términos y es la fuente real de la imagen. */}
+        <Reencuadrar limites={limites} relleno={relleno} />
         <AttributionControl position="bottomright" prefix={false} />
         <TileLayer
           attribution="Imágenes &copy; Esri, Maxar, Earthstar Geographics"

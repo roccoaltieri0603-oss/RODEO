@@ -9,7 +9,6 @@ import type { EstadoOrdenPastoreo } from "../hooks/useOrdenPastoreo";
 import AsignarPasturaModal from "./AsignarPasturaModal";
 import PasturasOnboarding from "./PasturasOnboarding";
 import NotificationsPanel from "./NotificationsPanel";
-import OrdenPastoreoPanel from "./OrdenPastoreoPanel";
 import BotonAccion from "./ui/BotonAccion";
 import BotonSubdividirIA from "./ui/BotonSubdividirIA";
 import Button from "./ui/Button";
@@ -24,6 +23,8 @@ import IconoFiltro from "./ui/IconoFiltro";
 import { MUTED, rankingItemClass } from "./ui/ranking";
 import type { ResultadoLote } from "../copernicus/types";
 import { diaMes, formatoNdvi } from "../copernicus/presentacion";
+import LoteExpandido from "./LoteExpandido";
+import CalendarioLotes from "./CalendarioLotes";
 
 export type DrawMode = "idle" | "establecimiento" | "lote";
 type Tab = "lotes" | "clima" | "condicion" | "notificaciones";
@@ -35,7 +36,6 @@ type Tab = "lotes" | "clima" | "condicion" | "notificaciones";
  * salir sin hacer nada.
  */
 const PASTILLA = "inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border-2 px-3 py-1 text-[0.75rem] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-const PASTILLA_VERDE = `${PASTILLA} border-[var(--color-campo-600)] bg-[var(--color-campo-200)] text-[var(--color-campo-900)] hover:enabled:bg-[var(--color-campo-100)]`;
 /** Consultar datos (condición y clima): verde liso, sin borde a la vista. */
 const PASTILLA_CONSULTA = `${PASTILLA} border-[var(--color-campo-500)] bg-[var(--color-campo-500)] text-white hover:enabled:border-[var(--color-campo-600)] hover:enabled:bg-[var(--color-campo-600)]`;
 const PASTILLA_PASTURA = `${PASTILLA} border-[var(--color-campo-700)] bg-[var(--color-campo-700)] text-white hover:enabled:border-[var(--color-campo-600)] hover:enabled:bg-[var(--color-campo-600)]`;
@@ -161,7 +161,6 @@ export default function Sidebar({
   panelCondicion,
   ordenPastoreo,
   onLoteActualizado,
-  onPastoreoRegistrado,
 }: SidebarProps) {
   const { establecimientoId, puede, membresia } = useEstablecimiento();
   const puedeVerNotificaciones = membresia?.rol !== "VISOR";
@@ -292,6 +291,23 @@ export default function Sidebar({
     .reduce((acc, l) => acc + areaHectareas(l.polygon), 0);
 
   /** La tarjeta de un lote: la usan la lista y, arriba de todo, el lote con animales. */
+  // El lote con el ganado va en una card grande y siempre abierta: es lo primero que el usuario
+  // quiere saber al entrar. Lleva el indicador, la miniatura y la regeneración, y no se pliega.
+  const filaAnimales = (lote: Lote) => (
+    <li key={lote.id} className={`rounded-2xl border-2 bg-white p-3 ${lote.id === selectedLoteId ? "border-[var(--color-lima)]" : "border-gray-200"}`}>
+      {/* Nombre grande y, a su derecha, el aviso de animales: es lo que más tiene que verse. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button type="button" onClick={() => onSelectLote(lote.id)} className="min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left">
+          <span className="block text-[1.6rem] leading-none font-bold tracking-[-0.03em] text-gray-900">Lote {lote.numero}</span>
+        </button>
+        <IndicadorConAnimales grande simulado={!lotesConJornada.has(lote.id)} />
+        <button type="button" onClick={() => onOpenFicha(lote.id)} className="foco-campo ml-auto flex-none cursor-pointer rounded-full border-0 bg-[var(--color-verde-accion)] px-3 py-1 text-[0.76rem] font-medium text-gray-900 transition-colors duration-150 hover:bg-[var(--color-lima)]">Ver ficha</button>
+      </div>
+      {lote.apodo && <p className="m-0 mt-1 text-[0.95rem] font-medium text-gray-500">{lote.apodo}</p>}
+      <LoteExpandido establecimientoId={establecimientoId} lote={lote} />
+    </li>
+  );
+
   const filaLote = (lote: Lote) => {
     const ha = areaHectareas(lote.polygon);
     const selected = lote.id === selectedLoteId;
@@ -367,7 +383,7 @@ export default function Sidebar({
             ) : null}
 
             {!enEdicion && (
-              <details className="group relative">
+              <details data-menu-flotante className="group relative">
                 <summary
                   aria-label={`Más opciones: Lote ${lote.numero}`}
                   title="Más opciones"
@@ -426,6 +442,7 @@ export default function Sidebar({
             )}
           </div>
         </div>
+        {selected && !enEdicion && <LoteExpandido establecimientoId={establecimientoId} lote={lote} />}
       </li>
     );
   };
@@ -438,6 +455,21 @@ export default function Sidebar({
   // La sidebar flota sobre el mapa a alto completo, como en el diseño. Al estar fuera del flujo, el <main> del mapa ocupa todo el ancho
   // solo: no hace falta cambiar la estructura ni remontar Leaflet.
   const enOnboarding = Boolean(onboardingStep);
+
+  // Los menús de tres puntos y el de Ordenar son <details>: no se cierran solos.
+  // Se pliegan al tocar cualquier otro lado (otra card, otro menú) o con Esc.
+  useEffect(() => {
+    const cerrarAbiertos = (excepto: Node | null) => {
+      document.querySelectorAll<HTMLDetailsElement>("details[data-menu-flotante][open]").forEach((menu) => {
+        if (!excepto || !menu.contains(excepto)) menu.removeAttribute("open");
+      });
+    };
+    const alTocar = (evento: PointerEvent) => cerrarAbiertos(evento.target as Node);
+    const alTeclear = (evento: KeyboardEvent) => { if (evento.key === "Escape") cerrarAbiertos(null); };
+    document.addEventListener("pointerdown", alTocar, true);
+    document.addEventListener("keydown", alTeclear);
+    return () => { document.removeEventListener("pointerdown", alTocar, true); document.removeEventListener("keydown", alTeclear); };
+  }, []);
   const claseFlotante = "absolute top-3 bottom-3 left-3 z-[1200] flex min-h-0 w-[clamp(480px,46vw,600px)] max-w-[calc(100%-1.5rem)] flex-col gap-[clamp(0.5rem,1.17vw,0.9375rem)] overflow-y-auto sin-barra-scroll rounded-[clamp(20px,3.1vw,40px)] bg-[var(--color-vidrio)] p-[clamp(0.6rem,1.17vw,0.9375rem)] font-display backdrop-blur-[20px]";
   // Fuera del onboarding: panel angosto, flotando sobre el mapa con un borde fino de mapa alrededor.
   const claseAside = enOnboarding
@@ -627,18 +659,14 @@ export default function Sidebar({
               los extremos se abre una cuña de vidrio entre la base recta de la
               solapa y el borde curvo de la tarjeta. */}
           <div className="sin-barra-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-b-[28px] bg-white p-3">
-            {tab === "lotes" && (
-              // shrink-0: con min-h-0 solo, este panel se encogía dentro del
-              // contenedor flex y su contenido quedaba fuera de alcance, sin
-              // barra de desplazamiento. Así su alto real cuenta y el contenedor
-              // de arriba scrollea.
+            {/* Lotes, Clima y Condición quedan montados y sólo se esconden: al
+                cambiar de solapa no se vuelve a pedir ni a calcular nada. */}
+            <div className={tab === "lotes" ? "contents" : "hidden"}>
+              {/* shrink-0: con min-h-0 solo, este panel se encogía dentro del
+                  contenedor flex y su contenido quedaba fuera de alcance, sin
+                  barra de desplazamiento. Así su alto real cuenta y el contenedor
+                  de arriba scrollea. */}
               <Panel plano className="min-h-0 shrink-0">
-                <div className="flex flex-col gap-0.5">
-                  <h3 className="m-0 text-xl font-medium tracking-[-0.02em] text-gray-900">Mis lotes</h3>
-                  <p className="m-0 text-[0.75rem] leading-snug text-gray-700">
-                    {lotesVisibles.length === 1 ? "1 lote" : `${lotesVisibles.length} lotes`}
-                  </p>
-                </div>
                 {editingBoundary ? (
                   <div className="flex flex-wrap gap-2">
                     <Button variant="primary" onClick={onSaveEditBoundary}>
@@ -672,6 +700,12 @@ export default function Sidebar({
                           title: iaBloqueada && !iaGenerando ? "Terminá lo que estás editando para usar la IA." : undefined,
                           icono: <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M9.5 2.5c.3 2.6 1 4.2 2.1 5.3 1.1 1.1 2.7 1.8 5.3 2.1-2.6.3-4.2 1-5.3 2.1-1.1 1.1-1.8 2.7-2.1 5.3-.3-2.6-1-4.2-2.1-5.3-1.1-1.1-2.7-1.8-5.3-2.1 2.6-.3 4.2-1 5.3-2.1 1.1-1.1 1.8-2.7 2.1-5.3Z" /></svg>,
                         }] : []),
+                        ...(drawMode === "idle" && !editingBoundary && !editingLoteId && !seleccionMultiple ? [{
+                          etiqueta: "Seleccionar varios",
+                          onSelect: () => { setListaAbierta(true); setSeleccionMultiple(true); },
+                          disabled: batchBloqueado,
+                          icono: <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 8.5l3 3 9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+                        }] : []),
                       ]}
                     />
                     {/* Con el botón animado dentro del menú, el "analizando" se avisa acá. */}
@@ -688,25 +722,18 @@ export default function Sidebar({
                   <div className="border-t border-gray-200 pt-2.5">{panelSugerencias}</div>
                 )}
 
-                {/* El lote con animales va primero en la solapa, con la misma
-                    tarjeta de la lista: sólo suma el punto. No se repite abajo. */}
-                {lotesConAnimales.length > 0 && !panelSugerencias && !editingBoundary && drawMode === "idle" && (
-                  <ul aria-label="Lotes con animales" className="m-0 flex list-none flex-col gap-2 p-0">
-                    {lotesConAnimales.map(filaLote)}
-                  </ul>
+                {/* Arriba, cuándo entra cada lote; abajo, dónde está el ganado. */}
+                {!panelSugerencias && !editingBoundary && !editingLoteId && drawMode === "idle" && (
+                  <CalendarioLotes lotesActivos={lotes.filter((lote) => lote.activo)} orden={ordenPastoreo} refresco={ordenPastoreo} onSelectLote={onSelectLote} />
                 )}
 
-                {ordenPastoreo && !panelSugerencias && !editingBoundary && !editingLoteId && drawMode === "idle" && (
-                  <OrdenPastoreoPanel
-                    orden={ordenPastoreo}
-                    lotes={lotes}
-                    onSelectLote={onSelectLote}
-                    onVerOrden={() => setTab("condicion")}
-                    onLoteActualizado={onLoteActualizado}
-                    onPastoreoRegistrado={onPastoreoRegistrado}
-                    onActualizarClima={(id) => onActualizarSeleccionados([id], "clima")}
-                    actualizandoClima={operacionBatch === "clima"}
-                  />
+                {lotesConAnimales.length > 0 && !panelSugerencias && !editingBoundary && drawMode === "idle" && (
+                  <section aria-label="Dónde está el ganado" className="flex flex-col gap-2">
+                  <h3 className="m-0 text-[0.68rem] font-bold tracking-[0.08em] text-gray-400 uppercase">Dónde está el ganado</h3>
+                  <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                    {lotesConAnimales.map(filaAnimales)}
+                  </ul>
+                  </section>
                 )}
 
                 {/* La lista completa va plegada: lo principal de esta pantalla es
@@ -740,7 +767,7 @@ export default function Sidebar({
                     />
                   </div>
 
-                  <details className="group relative ml-auto">
+                  <details data-menu-flotante className="group relative ml-auto">
                     {/* Con el ícono solo, nueve criterios de orden quedaban
                         invisibles. El texto muestra además cuál está puesto. */}
                     <summary
@@ -762,6 +789,15 @@ export default function Sidebar({
                           {orden}
                         </button>
                       ))}
+                      <div className="mt-1 flex flex-col gap-1 border-t border-gray-100 pt-2">
+                        <span className="px-2 text-[0.64rem] font-bold tracking-[0.08em] text-gray-400 uppercase">Mostrar</span>
+                        <button type="button" aria-pressed={!showInactivos} onClick={() => showInactivos && onToggleShowInactivos()} className={`rounded px-2 py-1 text-left transition-colors ${!showInactivos ? "bg-[var(--color-lima)]/35 text-gray-900" : "text-gray-600 hover:bg-gray-50"}`}>
+                          Activos <span className="tabular-nums">{lotes.filter((l) => l.activo).length}</span>
+                        </button>
+                        <button type="button" aria-pressed={showInactivos} onClick={() => !showInactivos && onToggleShowInactivos()} className={`rounded px-2 py-1 text-left transition-colors ${showInactivos ? "bg-[var(--color-lima)]/35 text-gray-900" : "text-gray-600 hover:bg-gray-50"}`}>
+                          Inactivos <span className="tabular-nums">{lotes.filter((l) => !l.activo).length}</span>
+                        </button>
+                      </div>
                     </div>
                   </details>
                 </div>
@@ -769,8 +805,7 @@ export default function Sidebar({
                 {/* Seleccionar varios y el filtro Activos/Inactivos comparten
                     renglón, como en el Figma: eran dos filas para dos controles
                     chicos. */}
-                <div className="flex items-start justify-between gap-2">
-                {seleccionMultiple && drawMode === "idle" && !editingBoundary && !editingLoteId ? (
+                {seleccionMultiple && drawMode === "idle" && !editingBoundary && !editingLoteId && (
                   <div className="flex min-w-0 flex-col gap-2">
                     <p className={MUTED} aria-live="polite">{lotesSeleccionados.length} lotes seleccionados</p>
                     <div className="flex flex-wrap gap-2">
@@ -790,34 +825,7 @@ export default function Sidebar({
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <button type="button" className={PASTILLA_VERDE} disabled={batchBloqueado} onClick={() => setSeleccionMultiple(true)}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M2 8.5l3 3 9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Seleccionar varios
-                  </button>
                 )}
-
-                  <div className="flex flex-none overflow-hidden rounded-full border border-gray-200 text-[0.68rem] font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => showInactivos && onToggleShowInactivos()}
-                      aria-pressed={!showInactivos}
-                      className={`px-2.5 py-0.5 transition-colors ${!showInactivos ? "bg-[var(--color-campo-100)] text-[var(--color-campo-900)]" : "bg-white text-gray-400 hover:bg-gray-50"}`}
-                    >
-                      Activos <span className="tabular-nums">{lotes.filter(l => l.activo).length}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => !showInactivos && onToggleShowInactivos()}
-                      aria-pressed={showInactivos}
-                      className={`px-2.5 py-0.5 transition-colors ${showInactivos ? "bg-gray-200 text-gray-700" : "bg-white text-gray-400 hover:bg-gray-50"}`}
-                    >
-                      Inactivos <span className="tabular-nums">{lotes.filter(l => !l.activo).length}</span>
-                    </button>
-                  </div>
-                </div>
 
                 {lotesFiltrados.length === 0 && (
                   <p className={MUTED}>{busqueda ? "No hay coincidencias. Probá con el número o el apodo del lote." : !showInactivos && lotes.length > 0 ? "No hay lotes activos. Mostrá los inactivos para consultarlos." : "Todavía no hay lotes para mostrar."}</p>
@@ -843,10 +851,10 @@ export default function Sidebar({
                 )}
                 {panelLote}
               </Panel>
-            )}
+            </div>
 
-            {tab === "clima" && panelClima}
-            {tab === "condicion" && panelCondicion}
+            <div className={tab === "clima" ? "contents" : "hidden"}>{panelClima}</div>
+            <div className={tab === "condicion" ? "contents" : "hidden"}>{panelCondicion}</div>
             {tab === "notificaciones" && <NotificationsPanel lotes={lotes} {...notificaciones} onRetry={notificaciones.recargar} onMarcarLeida={notificaciones.marcarLeida} onMarcarTodas={notificaciones.marcarTodas} onEliminarLeida={notificaciones.eliminarLeida} onAnterior={notificaciones.anterior} onSiguiente={notificaciones.siguiente} onVerLote={(id) => { onSelectLote(id); setTab("lotes"); }} />}
           </div>
           </div>

@@ -21,6 +21,16 @@
   color: inherit;
 }
 
+/* Miniatura chica (LoteExpandido.tsx): el crédito de Esri se mantiene, porque
+   sus términos lo exigen, pero en letra mínima y apagado para no tapar el lote. */
+.miniatura-compacta .leaflet-control-attribution {
+  padding: 0 3px 1px !important;
+  font-size: 5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
 /* Sin botones de zoom (se hace con la rueda, el pellizco o doble clic). La
    marca RODEO ocupa la esquina superior derecha: los controles bajan debajo. */
 .leaflet-top.leaflet-right {

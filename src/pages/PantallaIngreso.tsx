@@ -25,8 +25,6 @@ const BOTON_CLARO =
   "foco-campo flex h-12 w-full cursor-pointer items-center justify-center rounded-full border-0 bg-white/95 px-[26px] text-[18px] leading-[22px] font-medium text-landing-tinta transition-colors hover:bg-white disabled:cursor-default disabled:opacity-60";
 const BOTON_CONTORNO =
   "foco-campo flex h-[52px] w-full cursor-pointer items-center justify-center rounded-full border-2 border-white/95 bg-white/4 px-[26px] text-[18px] leading-[22px] font-medium text-white transition-colors hover:bg-white/10 disabled:cursor-default disabled:opacity-60";
-const LINK_VERDE =
-  "foco-campo cursor-pointer rounded border-0 bg-transparent p-0 font-medium text-verde-accion hover:underline disabled:cursor-default";
 
 interface CampoAccesoProps extends InputHTMLAttributes<HTMLInputElement> {
   id: string;
@@ -77,14 +75,6 @@ export default function PantallaIngreso({ onAuthenticated }: PropiedadesPantalla
     setConfirmPassword("");
     setPassword("");
     setMostrarPassword(false);
-  }
-
-  // Ni la recuperación de contraseña ni el pedido de demo existen todavía en
-  // el backend. Los botones están porque son parte del diseño, pero avisan en
-  // vez de simular un envío que no ocurre.
-  function avisarNoDisponible(que: string) {
-    setError(null);
-    setAviso(`${que} todavía no está disponible.`);
   }
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
@@ -236,19 +226,6 @@ export default function PantallaIngreso({ onAuthenticated }: PropiedadesPantalla
             />
           )}
 
-          {!esRegistro && (
-            <div className="mt-[22px] text-right text-sm leading-[19px]">
-              <button
-                type="button"
-                className={LINK_VERDE}
-                onClick={() => avisarNoDisponible("La recuperación de contraseña")}
-                disabled={enviando}
-              >
-                ¿Olvidaste tu contraseña?
-              </button>
-            </div>
-          )}
-
           {error && (
             <p
               role="alert"
@@ -280,24 +257,25 @@ export default function PantallaIngreso({ onAuthenticated }: PropiedadesPantalla
             <button
               type="button"
               className={`${BOTON_CONTORNO} mt-[14px]`}
-              onClick={() => avisarNoDisponible("El pedido de demo")}
+              onClick={() => irA("registro")}
               disabled={enviando}
             >
-              Solicitá una demo
+              Crear cuenta
             </button>
           )}
 
-          <p className="m-0 mt-7 text-center text-sm leading-[19px] text-white">
-            {esRegistro ? "¿Ya tenés cuenta? " : "¿No tenés cuenta? "}
+          {/* En el ingreso, "Crear cuenta" ya es el botón de arriba; sólo el registro necesita la vuelta. */}
+          {esRegistro && <p className="m-0 mt-7 text-center text-sm leading-[19px] text-white">
+            {"¿Ya tenés cuenta? "}
             <button
               type="button"
               className="foco-campo cursor-pointer rounded border-0 bg-transparent p-0 text-sm leading-[19px] font-normal text-verde-accion underline hover:no-underline disabled:cursor-default"
-              onClick={() => irA(esRegistro ? "login" : "registro")}
+              onClick={() => irA("login")}
               disabled={enviando}
             >
-              {esRegistro ? "Iniciá sesión" : "Creá una"}
+              Iniciá sesión
             </button>
-          </p>
+          </p>}
         </form>
       </section>
     </main>
